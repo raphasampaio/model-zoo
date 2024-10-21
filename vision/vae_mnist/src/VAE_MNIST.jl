@@ -21,6 +21,7 @@ using MLDatasets
 using ProgressMeter: Progress, next!
 using TensorBoardLogger: TBLogger, tb_overwrite
 using Random
+using Plots
 
 # load MNIST images and return loader
 function get_data(batch_size)
@@ -62,6 +63,7 @@ end
 function model_loss(encoder, decoder, x)
     μ, logσ, decoder_z = reconstuct(encoder, decoder, x)
     batch_size = size(x)[end]
+
     # KL-divergence
     kl_q_p = 0.5f0 * sum(@. (exp(2*logσ) + μ^2 - 1 - 2*logσ)) / batch_size
 
@@ -133,7 +135,7 @@ function train(; kws...)
     train_steps = 0
     @info "Start Training, total $(args.epochs) epochs"
     for epoch = 1:args.epochs
-        @info "Epoch $(epoch)"
+        @info "Epoch $epoch"
         progress = Progress(length(loader))
 
         for (x, _) in loader 
@@ -157,13 +159,14 @@ function train(; kws...)
 
             train_steps += 1
         end
+
         # save image
         _, _, rec_original = reconstuct(encoder, decoder, original)
         rec_original = sigmoid.(rec_original)
         image = convert_to_image(rec_original, args.sample_size)
-        image_path = joinpath(args.save_path, "epoch_$(epoch).png")
+        image_path = joinpath(args.save_path, "epoch_$epoch.png")
         save(image_path, image)
-        @info "Image saved: $(image_path)"
+        @info "Image saved: $image_path"
     end
 
     # save model
@@ -172,8 +175,47 @@ function train(; kws...)
         JLD2.save(filepath, "encoder", Flux.state(encoder),
                             "decoder", Flux.state(decoder),
                             "args", args)                            
-        @info "Model saved: $(filepath)"
+        @info "Model saved: $filepath"
     end
+end
+
+function plot_result()
+    checkpoint = JLD2.load("output/checkpoint.jld2")
+    encoder_state = checkpoint["encoder"]
+    decoder_state = checkpoint["decoder"]
+
+    args = Args(; checkpoint["args"]...)
+    encoder = Encoder(args.input_dim, args.latent_dim, args.hidden_dim)
+    decoder = Decoder(args.input_dim, args.latent_dim, args.hidden_dim)
+    Flux.loadmodel!(encoder, encoder_state)
+    Flux.loadmodel!(decoder, decoder_state)
+    loader = get_data(args.batch_size)
+
+    # # clustering in the latent space
+    # # visualize first two dims
+    # plt = scatter(palette=:rainbow)
+    # for (i, (x, y)) in enumerate(loader)
+    #     i < 20 || break
+    #     μ, logσ = encoder(x)
+    #     @assert size(μ, 1) == 2 # Latent_dim has to be 2 for direct visualization, otherwise use PCA or t-SNE
+    #     scatter!(μ[1, :], μ[2, :], 
+    #         markerstrokewidth=0, markeralpha=0.8,
+    #         aspect_ratio=1,
+    #         markercolor=y, label="")
+    # end
+    # savefig(plt, "output/clustering.png")
+
+    z = range(-2.0, stop=2.0, length=11)
+    len = Base.length(z)
+    z1 = repeat(z, len)
+    z2 = sort(z1)
+    x = zeros(Float32, args.latent_dim, len^2)
+    x[1, :] = z1
+    x[2, :] = z2
+    samples = decoder(x)
+    samples = sigmoid.(samples)
+    image = convert_to_image(samples, len)
+    save("output/manifold.png", image)
 end
 
 end
