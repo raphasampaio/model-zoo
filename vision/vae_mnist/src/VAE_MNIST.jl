@@ -1,3 +1,5 @@
+module VAE_MNIST
+
 # Variational Autoencoder(VAE)
 #
 # Auto-Encoding Variational Bayes
@@ -142,6 +144,7 @@ function train(; kws...)
     
             Flux.update!(opt_enc, encoder, grad_enc)
             Flux.update!(opt_dec, decoder, grad_dec)
+
             # progress meter
             next!(progress; showvalues=[(:loss, loss)]) 
 
@@ -173,7 +176,4 @@ function train(; kws...)
     end
 end
 
-if abspath(PROGRAM_FILE) == @__FILE__ 
-    train()
 end
-
